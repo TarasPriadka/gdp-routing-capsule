@@ -48,5 +48,5 @@ gdp_client = { path = "../client" }
 criterion = "0.3"
 
 [[bench]]
-name = "my_benchmark"
+name = "bench"
 harness = false
