@@ -136,19 +136,22 @@ pub fn switch_pipeline(
     rib_ip: Ipv4Addr,
     debug: bool,
 ) -> impl GdpPipeline {
+    
     pipeline! {
         GdpAction::Forward => |group| {
             group
             .group_by(
+                // for each packet check certificate
                 move |packet| {
                     check_packet_certificates(gdp_name, packet, &store, None, nic_name, debug)
                 },
                 pipeline! {
+                    // if for a group a certificate is valid
                     true => |group| {
                         group
                         .for_each(move |packet| {
                             // Back-cache the route for 100s to allow NACK to reflect
-                            store.nack_reply_cache.put(
+                            store.nack_reply_cache.put( // put each packet source into the local cache with time
                                 packet.src(),
                                 FwdTableEntry::new(
                                     packet.envelope().envelope().envelope().src(),
@@ -161,8 +164,10 @@ pub fn switch_pipeline(
                             Ok(())
                         })
                         .group_by(
+                            //select packets for which we have destination in local cache
                             move |packet| matches!(find_destination(packet.dst(), store), DestResult::Hit(_)),
                             pipeline! {
+                                //if in local cache for destinations
                                 true => |group| {
                                     group.filter_map(move |mut packet| {
                                         if let DestResult::Hit(ip) = find_destination(packet.dst(), store) {
@@ -186,7 +191,7 @@ pub fn switch_pipeline(
                                             println!("{} querying RIB for destination {:?}", nic_name, packet.dst());
                                         }
                                         if let DestResult::Miss(proxy) = find_destination(packet.dst(), store) {
-                                            create_rib_request(Mbuf::new()?, &RibQuery::next_hop_for(proxy), src_mac, src_ip, gdp_name, rib_ip)
+                                            create_rib_rquest(Mbuf::new()?, &RibQuery::next_hop_for(proxy), src_mac, src_ip, gdp_name, rib_ip)
                                         } else {
                                             unreachable!();
                                         }
@@ -195,6 +200,7 @@ pub fn switch_pipeline(
                             }
                         )
                     },
+                    // if cert is not valid, query certs from RIB and bounce the packet with injected NACK
                     false => |group| {
                         group
                         .inject(move |packet| {
