@@ -136,7 +136,7 @@ pub fn switch_pipeline(
     rib_ip: Ipv4Addr,
     debug: bool,
 ) -> impl GdpPipeline {
-    
+
     pipeline! {
         GdpAction::Forward => |group| {
             group
@@ -191,7 +191,7 @@ pub fn switch_pipeline(
                                             println!("{} querying RIB for destination {:?}", nic_name, packet.dst());
                                         }
                                         if let DestResult::Miss(proxy) = find_destination(packet.dst(), store) {
-                                            create_rib_rquest(Mbuf::new()?, &RibQuery::next_hop_for(proxy), src_mac, src_ip, gdp_name, rib_ip)
+                                            create_rib_request(Mbuf::new()?, &RibQuery::next_hop_for(proxy), src_mac, src_ip, gdp_name, rib_ip)
                                         } else {
                                             unreachable!();
                                         }
