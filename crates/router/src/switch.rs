@@ -1,6 +1,8 @@
 use std::net::Ipv4Addr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::{Duration, Instant};
+
 use anyhow::{bail, Result};
 use capsule::batch::{Batch, Either};
 use capsule::net::MacAddr;
@@ -20,6 +22,8 @@ use crate::pipeline::GdpPipeline;
 use crate::rib::{create_rib_request, handle_rib_reply};
 use crate::ribpayload::{process_rib_data, RibQuery};
 use crate::{pipeline, FwdTableEntry};
+
+use crate::bench::time_it;
 
 enum DestResult {
     Hit(Ipv4Addr),
@@ -143,7 +147,7 @@ pub fn switch_pipeline(
             .group_by(
                 // for each packet check certificate
                 move |packet| {
-                    check_packet_certificates(gdp_name, packet, &store, None, nic_name, debug)
+                    time_it!("DEBUG: certificates ", check_packet_certificates(gdp_name, packet, &store, None, nic_name, debug))
                 },
                 pipeline! {
                     // if for a group a certificate is valid
@@ -151,7 +155,7 @@ pub fn switch_pipeline(
                         group
                         .for_each(move |packet| {
                             // Back-cache the route for 100s to allow NACK to reflect
-                            store.nack_reply_cache.put( // put each packet source into the local cache with time
+                            time_it!("DEBUG: back-cache ", store.nack_reply_cache.put( // put each packet source into the local cache with time
                                 packet.src(),
                                 FwdTableEntry::new(
                                     packet.envelope().envelope().envelope().src(),
@@ -160,22 +164,22 @@ pub fn switch_pipeline(
                                         .as_secs()
                                         + 100,
                                 ),
-                            );
+                            ));
                             Ok(())
                         })
                         .group_by(
                             //select packets for which we have destination in local cache
-                            move |packet| matches!(find_destination(packet.dst(), store), DestResult::Hit(_)),
+                            move |packet| time_it!("DEBUG| Find matches dests", matches!(find_destination(packet.dst(), store), DestResult::Hit(_))),
                             pipeline! {
                                 //if in local cache for destinations
                                 true => |group| {
                                     group.filter_map(move |mut packet| {
-                                        if let DestResult::Hit(ip) = find_destination(packet.dst(), store) {
+                                        if let DestResult::Hit(ip) = time_it!("DEBUG | find destinations: ", find_destination(packet.dst(), store)) {
                                             if debug {
                                                 println!("{} forwarding packet to ip {}", nic_name, ip);
                                             }
-                                            add_forwarding_cert(&mut packet, store, meta, private_key)?;
-                                            forward_gdp(packet, ip)
+                                            time_it!("DEBUG | add forwarding: ", add_forwarding_cert(&mut packet, store, meta, private_key)?);
+                                            time_it!("DEBUG | forward: ", forward_gdp(packet, ip));
                                         } else {
                                             unreachable!();
                                         }
