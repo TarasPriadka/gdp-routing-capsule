@@ -41,6 +41,7 @@ mod sidecar;
 mod statistics;
 mod switch;
 mod workloads;
+mod bench;
 
 arg_enum! {
     #[derive(PartialEq)]

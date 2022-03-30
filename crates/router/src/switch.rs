@@ -1,8 +1,6 @@
 use std::net::Ipv4Addr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{Duration, Instant};
-
 use anyhow::{bail, Result};
 use capsule::batch::{Batch, Either};
 use capsule::net::MacAddr;
@@ -23,7 +21,7 @@ use crate::rib::{create_rib_request, handle_rib_reply};
 use crate::ribpayload::{process_rib_data, RibQuery};
 use crate::{pipeline, FwdTableEntry};
 
-use crate::bench::time_it;
+use crate::time_it;
 
 enum DestResult {
     Hit(Ipv4Addr),
@@ -116,7 +114,7 @@ pub fn forward_gdp(mut gdp: Gdp<DTls<Ipv4>>, dst: Ipv4Addr) -> Result<Either<Gdp
     let ethernet = ipv4.envelope_mut();
     ethernet.set_src(ethernet.dst());
     ethernet.set_dst(MacAddr::broadcast());
-    // println!("outgoing: {:?}", gdp);
+    println!("outgoing: {:?}", gdp);
     Ok(Either::Keep(gdp))
 }
 
@@ -147,7 +145,7 @@ pub fn switch_pipeline(
             .group_by(
                 // for each packet check certificate
                 move |packet| {
-                    time_it!("DEBUG: certificates ", check_packet_certificates(gdp_name, packet, &store, None, nic_name, debug))
+                    time_it!("DEBUG| certificates: ", check_packet_certificates(gdp_name, packet, &store, None, nic_name, debug))
                 },
                 pipeline! {
                     // if for a group a certificate is valid
@@ -155,7 +153,7 @@ pub fn switch_pipeline(
                         group
                         .for_each(move |packet| {
                             // Back-cache the route for 100s to allow NACK to reflect
-                            time_it!("DEBUG: back-cache ", store.nack_reply_cache.put( // put each packet source into the local cache with time
+                            time_it!("DEBUG| back-cache: ", store.nack_reply_cache.put( // put each packet source into the local cache with time
                                 packet.src(),
                                 FwdTableEntry::new(
                                     packet.envelope().envelope().envelope().src(),
@@ -169,7 +167,7 @@ pub fn switch_pipeline(
                         })
                         .group_by(
                             //select packets for which we have destination in local cache
-                            move |packet| time_it!("DEBUG| Find matches dests", matches!(find_destination(packet.dst(), store), DestResult::Hit(_))),
+                            move |packet| time_it!("DEBUG| Find matches dests:", matches!(find_destination(packet.dst(), store), DestResult::Hit(_))),
                             pipeline! {
                                 //if in local cache for destinations
                                 true => |group| {
@@ -179,7 +177,8 @@ pub fn switch_pipeline(
                                                 println!("{} forwarding packet to ip {}", nic_name, ip);
                                             }
                                             time_it!("DEBUG | add forwarding: ", add_forwarding_cert(&mut packet, store, meta, private_key)?);
-                                            time_it!("DEBUG | forward: ", forward_gdp(packet, ip));
+                                            //time_it!("DEBUG | forward: ", forward_gdp(packet, ip));
+                                            forward_gdp(packet, ip)
                                         } else {
                                             unreachable!();
                                         }
@@ -208,14 +207,14 @@ pub fn switch_pipeline(
                     false => |group| {
                         group
                         .inject(move |packet| {
-                            let src_ip = packet.envelope().envelope().envelope().dst();
-                            let src_mac = packet.envelope().envelope().envelope().envelope().dst();
+                            let src_ip = time_it!("DEBUG| packet ip: ", packet.envelope().envelope().envelope().dst());
+                            let src_mac = time_it!("DEBUG| packet mac: ", packet.envelope().envelope().envelope().envelope().dst());
                             let mut unknown_names = Vec::new();
-                            check_packet_certificates(gdp_name, packet, &store, Some(&mut unknown_names), nic_name, debug,);
+                            time_it!("DEBUG| packet check_packet_certificates: ", check_packet_certificates(gdp_name, packet, &store, Some(&mut unknown_names), nic_name, debug,));
                             if debug {
                                 println!("{} querying RIB for metas {:?}", nic_name, packet.dst());
                             }
-                            create_rib_request(Mbuf::new()?, &RibQuery::metas_for(&unknown_names), src_mac, src_ip, gdp_name, rib_ip)
+                            time_it!("DEBUG| create rib request: ", create_rib_request(Mbuf::new()?, &RibQuery::metas_for(&unknown_names), src_mac, src_ip, gdp_name, rib_ip))
                         })
                         .map(bounce_gdp)
                     },
