@@ -158,6 +158,9 @@ fn handle_rib_query(
     out.set_data_len(message.len());
 
     out.reconcile_all();
+
+    println!("DEBUG| RIB response: {:?}", out);
+
     Ok(out)
 }
 

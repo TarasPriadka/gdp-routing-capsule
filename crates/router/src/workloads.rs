@@ -119,6 +119,7 @@ fn send_initial_packets(
         true,
     )
     .unwrap()];
+    println!("DEBUG| send certs data: src_gdp: {:?}, dst_gdp: {:?}, certificates: {:?}", src_gdp_name, dst_gdp_name, certificates);
     batch::poll_fn(|| Mbuf::alloc_bulk(num_packets).unwrap())
         .map(move |packet| {
             prep_packet(
