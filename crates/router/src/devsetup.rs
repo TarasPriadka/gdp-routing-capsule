@@ -46,7 +46,7 @@ pub fn start_dev_server(config: RuntimeConfig) -> Result<()> {
             )
         })?
         // GDP index = 1
-        .add_pipeline_to_port("eth2", move |q| dev_schedule(q, "client"))?
+        .add_pipeline_to_port("eth2", move |q| dev_schedule_flood(q, "client"))?
         // GDP index = 2
         .add_pipeline_to_port("eth3", move |q| {
             let name = "switch";

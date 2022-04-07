@@ -188,6 +188,45 @@ pub fn dev_schedule(q: PortQueue, name: &str) -> impl Pipeline + '_ {
     })
 }
 
+pub fn dev_schedule_flood(q: PortQueue, name: &str) -> impl Pipeline + '_ {
+    let src_ip = Ipv4Addr::new(10, 100, 1, 11);
+    let switch_ip = Ipv4Addr::new(10, 100, 1, 12);
+    let meta = metadata_of_index(1);
+    let private_key = private_key_of_index(1);
+
+    send_rib_query(
+        q.clone(),
+        src_ip,
+        gdp_name_of_index(1),
+        switch_ip,
+        &RibQuery::announce_route(
+            meta,
+            RtCert::new_wrapped(
+                meta,
+                private_key,
+                CertDest::GdpName(gdp_name_of_index(2)),
+                true,
+                )
+            .unwrap(),
+            ),
+            "client",
+            );
+
+    Schedule::new(name, async move {
+        for _i in 0..100000 {
+            send_initial_packets(
+                q.clone(),
+                src_ip,
+                switch_ip,
+                36,
+                payload_size,
+                random_dest_chance,
+            );
+            delay_for(Duration::from_micros(1));
+        }
+    })
+}
+
 fn client_schedule(
     q: PortQueue,
     name: &str,
