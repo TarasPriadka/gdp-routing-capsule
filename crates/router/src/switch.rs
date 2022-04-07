@@ -138,14 +138,14 @@ pub fn switch_pipeline(
     rib_ip: Ipv4Addr,
     debug: bool,
 ) -> impl GdpPipeline {
-
+    println!("gdp_name: {:?}, meta: {:?}, nic_name: {:?}", gdp_name, meta, nic_name);
     pipeline! {
         GdpAction::Forward => |group| {
             group
             .group_by(
                 // for each packet check certificate
                 move |packet| {
-                    time_it!("DEBUG| certificates: ", check_packet_certificates(gdp_name, packet, &store, None, nic_name, debug))
+                    time_it!(nic_name, "certificates first: ", check_packet_certificates(gdp_name, packet, &store, None, nic_name, debug))
                 },
                 pipeline! {
                     // if for a group a certificate is valid
@@ -153,7 +153,7 @@ pub fn switch_pipeline(
                         group
                         .for_each(move |packet| {
                             // Back-cache the route for 100s to allow NACK to reflect
-                            time_it!("DEBUG| back-cache: ", store.nack_reply_cache.put( // put each packet source into the local cache with time
+                            time_it!(nic_name, "back-cache: ", store.nack_reply_cache.put( // put each packet source into the local cache with time
                                 packet.src(),
                                 FwdTableEntry::new(
                                     packet.envelope().envelope().envelope().src(),
@@ -167,21 +167,21 @@ pub fn switch_pipeline(
                         })
                         .group_by(
                             //select packets for which we have destination in local cache
-                            move |packet| time_it!("DEBUG| Find matches dests:", matches!(find_destination(packet.dst(), store), DestResult::Hit(_))),
+                            move |packet| time_it!(nic_name, "Find matches dests:", matches!(find_destination(packet.dst(), store), DestResult::Hit(_))),
                             pipeline! {
                                 //if in local cache for destinations
                                 true => |group| {
                                     group.filter_map(move |mut packet| {
-                                        if let DestResult::Hit(ip) = time_it!("DEBUG | find destinations: ", find_destination(packet.dst(), store)) {
+                                        if let DestResult::Hit(ip) = time_it!(nic_name, "find destinations: ", find_destination(packet.dst(), store)) {
                                             if debug {
                                                 println!("{} forwarding packet to ip {}", nic_name, ip);
                                             }
-                                            time_it!("DEBUG | add forwarding: ", add_forwarding_cert(&mut packet, store, meta, private_key)?);
-                                            //time_it!("DEBUG | forward: ", forward_gdp(packet, ip));
-                                            forward_gdp(packet, ip)
+                                            time_it!(nic_name, "add forwarding: ", add_forwarding_cert(&mut packet, store, meta, private_key)?);
+                                            //time_it!(nic_name, "forward: ", forward_gdp(packet, ip));
+                                            time_it!(nic_name, "forward gdp: ", forward_gdp(packet, ip))
                                         } else {
                                             unreachable!();
-                                        }
+                                       }
                                     })
                                 },
                                 false => |group| {
@@ -194,7 +194,7 @@ pub fn switch_pipeline(
                                             println!("{} querying RIB for destination {:?}", nic_name, packet.dst());
                                         }
                                         if let DestResult::Miss(proxy) = find_destination(packet.dst(), store) {
-                                            create_rib_request(Mbuf::new()?, &RibQuery::next_hop_for(proxy), src_mac, src_ip, gdp_name, rib_ip)
+                                            time_it!(nic_name, "query for dests: create rib request", create_rib_request(Mbuf::new()?, &RibQuery::next_hop_for(proxy), src_mac, src_ip, gdp_name, rib_ip))
                                         } else {
                                             unreachable!();
                                         }
@@ -207,14 +207,14 @@ pub fn switch_pipeline(
                     false => |group| {
                         group
                         .inject(move |packet| {
-                            let src_ip = time_it!("DEBUG| packet ip: ", packet.envelope().envelope().envelope().dst());
-                            let src_mac = time_it!("DEBUG| packet mac: ", packet.envelope().envelope().envelope().envelope().dst());
+                            let src_ip = packet.envelope().envelope().envelope().dst();
+                            let src_mac = packet.envelope().envelope().envelope().envelope().dst();
                             let mut unknown_names = Vec::new();
-                            time_it!("DEBUG| packet check_packet_certificates: ", check_packet_certificates(gdp_name, packet, &store, Some(&mut unknown_names), nic_name, debug,));
+                            time_it!(nic_name, "packet check_packet_certificates: ", check_packet_certificates(gdp_name, packet, &store, Some(&mut unknown_names), nic_name, debug,));
                             if debug {
                                 println!("{} querying RIB for metas {:?}", nic_name, packet.dst());
                             }
-                            time_it!("DEBUG| create rib request: ", create_rib_request(Mbuf::new()?, &RibQuery::metas_for(&unknown_names), src_mac, src_ip, gdp_name, rib_ip))
+                            time_it!(nic_name, "not valid cert: create rib request: ", create_rib_request(Mbuf::new()?, &RibQuery::metas_for(&unknown_names), src_mac, src_ip, gdp_name, rib_ip))
                         })
                         .map(bounce_gdp)
                     },
