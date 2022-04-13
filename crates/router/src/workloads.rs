@@ -194,6 +194,8 @@ pub fn dev_schedule_flood(q: PortQueue, name: &str) -> impl Pipeline + '_ {
     let meta = metadata_of_index(1);
     let private_key = private_key_of_index(1);
 
+    let payload_size = 300;
+    let random_dest_chance = 0.0;
     send_rib_query(
         q.clone(),
         src_ip,
