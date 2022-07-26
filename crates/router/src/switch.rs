@@ -104,7 +104,8 @@ pub fn forward_gdp(mut gdp: Gdp<DTls<Ipv4>>, dst: Ipv4Addr) -> Result<Either<Gdp
 
     if ipv4.dst() == dst {
         // we are the destination!
-        println!("packet received!");
+        time_it!("target", "packet received", println!("packet received!"));
+        // time_it!(nic_name, "certificates first: ", check_packet_certificates(gdp_name, packet, &store, None, nic_name, debug))
         return Ok(Either::Drop(gdp.reset()));
     }
 

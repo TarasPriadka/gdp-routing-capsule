@@ -313,7 +313,7 @@ pub fn start_client_server(
                 "client",
             );
             client_schedule(q, "client", node_addr, switch_addr)
-            // flood_single(q, "client", node_addr, switch_addr)
+            // flood_single(q, "client", node_addr, switch_addr) shoots packets 
         })?
         .add_periodic_task_to_core(0, print_stats, Duration::from_secs(1))?
         .execute()?;
